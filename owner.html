@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src https://qdnzwayabeojvdapvfej.supabase.co; style-src 'unsafe-inline'; script-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<title>NIVAXA Dental Clinic Pune: owner view</title>
+<style>
+  :root { --bg:#f6f8fb; --card:#ffffff; --ink:#14202b; --muted:#5a6772; --line:#d6dee6; --brand:#12355b; --accent:#0e7c86; --bad:#9b2c2c; --warn:#fff3d6; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#10161c; --card:#18212a; --ink:#e8eef3; --muted:#9aa8b4; --line:#2b3844; --brand:#8fb8e6; --accent:#4cc3cd; --bad:#ff8f8f; --warn:#3a3118; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 18px 14px 40px; }
+  h1 { font-size: 20px; margin: 0 0 2px; color: var(--brand); }
+  h2 { font-size: 15px; margin: 22px 0 8px; color: var(--brand); text-transform: uppercase; letter-spacing: .04em; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .bad { color: var(--bad); font-size: 13px; font-weight: 600; }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:10px; }
+  input[type=password] { flex:1 1 240px; padding:10px 12px; border:1px solid var(--line); border-radius:8px; background:var(--card); color:var(--ink); font-size:15px; }
+  button { padding:10px 16px; border:0; border-radius:8px; background:var(--brand); color:var(--bg); font-weight:600; font-size:14px; cursor:pointer; }
+  button.ghost { background:transparent; color:var(--muted); border:1px solid var(--line); }
+  .cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .card .n { font-size:26px; font-weight:700; color:var(--accent); }
+  .card .l { color:var(--muted); font-size:12px; }
+  .card.alert .n { color:var(--bad); }
+  table { width:100%; border-collapse: collapse; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; display:block; overflow-x:auto; }
+  th, td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--line); font-size:13px; white-space:nowrap; }
+  th { color:var(--muted); font-weight:600; font-size:12px; }
+  .item { background:var(--card); border:1px solid var(--line); border-left:4px solid var(--bad); border-radius:8px; padding:10px 12px; margin-bottom:8px; }
+  .item .top { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .chip { font-size:11px; font-weight:700; text-transform:uppercase; padding:2px 7px; border-radius:99px; background:var(--warn); color:var(--ink); }
+  a { color: var(--accent); }
+  .banner { background:var(--warn); border:1px solid var(--line); border-radius:8px; padding:8px 12px; margin-top:12px; font-size:13px; }
+  .hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>NIVAXA Dental Clinic Pune</h1>
+  <div class="muted">Owner view (read only). Demonstration data.</div>
+
+  <div id="login">
+    <div class="row">
+      <input id="key" type="password" placeholder="Owner key" autocomplete="off" spellcheck="false">
+      <button id="go" type="button">Open</button>
+    </div>
+    <div class="row"><label class="muted"><input id="remember" type="checkbox"> Remember on this device</label></div>
+  </div>
+
+  <div class="row">
+    <span id="status" class="muted"></span>
+    <button id="refresh" class="ghost hidden" type="button">Refresh</button>
+    <button id="signout" class="ghost hidden" type="button">Sign out</button>
+  </div>
+  <div id="banner" class="banner hidden"></div>
+
+  <div id="app" class="hidden">
+    <h2 id="todayTitle">Today</h2>
+    <div id="cards" class="cards"></div>
+    <h2>Needs action</h2>
+    <div id="actions"></div>
+    <h2>Bookings, next 7 days</h2>
+    <div id="upcoming"></div>
+    <h2>Calls today</h2>
+    <div id="calls"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var API = 'https://qdnzwayabeojvdapvfej.supabase.co/functions/v1/swift-responder';
+  var LS = 'nivaxa_owner_key_v1';
+  var timer = null;
+
+  function $(id) { return document.getElementById(id); }
+  function el(tag, text, cls) {
+    var e = document.createElement(tag);
+    if (text !== undefined && text !== null) e.textContent = String(text);
+    if (cls) e.className = cls;
+    return e;
+  }
+  function clear(n) { while (n.firstChild) n.removeChild(n.firstChild); }
+  function show(n, on) { n.classList.toggle('hidden', !on); }
+  function status(msg, bad) { var s = $('status'); s.textContent = msg; s.className = bad ? 'bad' : 'muted'; }
+  function ist(iso) {
+    try {
+      return new Date(iso).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+    } catch (e) { return String(iso || ''); }
+  }
+
+  function table(headers, rows, emptyText) {
+    if (!rows.length) return el('div', emptyText, 'muted');
+    var t = el('table');
+    var thead = el('thead'), hr = el('tr');
+    headers.forEach(function (h) { hr.appendChild(el('th', h)); });
+    thead.appendChild(hr); t.appendChild(thead);
+    var tb = el('tbody');
+    rows.forEach(function (r) {
+      var tr = el('tr');
+      r.forEach(function (c) { tr.appendChild(el('td', c)); });
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    return t;
+  }
+
+  function render(d) {
+    var t = d.today || {};
+    $('todayTitle').textContent = 'Today' + (t.day ? ' (' + t.day + ')' : '');
+    var cards = $('cards'); clear(cards);
+    [
+      ['Calls handled', t.calls, ''],
+      ['Appointments booked', t.booked, ''],
+      ['Cancellations', t.cancelled, ''],
+      ['Emergency calls', t.emergencies, (t.emergencies > 0 ? 'alert' : '')],
+      ['Voice minutes used', t.minutes, '']
+    ].forEach(function (c) {
+      var card = el('div', null, 'card ' + c[2]);
+      card.appendChild(el('div', (c[1] === undefined || c[1] === null) ? '-' : c[1], 'n'));
+      card.appendChild(el('div', c[0], 'l'));
+      cards.appendChild(card);
+    });
+
+    var actions = $('actions'); clear(actions);
+    var list = d.actions || [];
+    if (!list.length) actions.appendChild(el('div', 'Nothing needs action.', 'muted'));
+    list.forEach(function (a) {
+      var item = el('div', null, 'item');
+      var top = el('div', null, 'top');
+      top.appendChild(el('span', a.priority || 'normal', 'chip'));
+      top.appendChild(el('strong', a.what || ''));
+      item.appendChild(top);
+      var meta = el('div', null, 'muted');
+      meta.appendChild(document.createTextNode(ist(a.raised_at) + '  '));
+      if (a.phone) {
+        var digits = String(a.phone).replace(/[^0-9+]/g, '');
+        var link = el('a', a.phone);
+        link.setAttribute('href', 'tel:' + digits);
+        meta.appendChild(link);
+      }
+      item.appendChild(meta);
+      actions.appendChild(item);
+    });
+
+    var up = $('upcoming'); clear(up);
+    up.appendChild(table(['Date', 'Time', 'Patient', 'Treatment', 'Phone ends'],
+      (d.upcoming || []).map(function (u) { return [u.date, u.time, u.patient, u.treatment || '', u.phone_tail || '']; }),
+      'No bookings in the next 7 days.'));
+
+    var calls = $('calls'); clear(calls);
+    calls.appendChild(table(['Time', 'Type', 'Outcome', 'Phone ends'],
+      (d.calls_today || []).map(function (c) { return [ist(c.at), c.intent || '', c.outcome || '', c.phone_tail || '']; }),
+      'No calls yet today.'));
+
+    var b = $('banner');
+    if (d.errors && d.errors.length) { b.textContent = 'Some sections could not load: ' + d.errors.join(', '); show(b, true); }
+    else show(b, false);
+  }
+
+  function signedIn(on) {
+    show($('login'), !on); show($('app'), on);
+    show($('refresh'), on); show($('signout'), on);
+  }
+
+  function load() {
+    var key = $('key').value.trim();
+    if (!key) { status('Enter the owner key.', true); return; }
+    status('Loading...');
+    fetch(API, { headers: { 'x-owner-key': key } })
+      .then(function (r) {
+        if (r.status === 401) { status('Key not accepted.', true); signedIn(false); throw new Error('stop'); }
+        if (!r.ok) { status('The service answered with an error (' + r.status + ').', true); throw new Error('stop'); }
+        return r.json();
+      })
+      .then(function (d) {
+        if (!d || (!d.today && !d.actions)) { status('Unexpected answer from the service.', true); return; }
+        render(d);
+        signedIn(true);
+        status('Updated ' + new Date().toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata' }) + ' IST');
+        if ($('remember').checked) { try { localStorage.setItem(LS, key); } catch (e) {} }
+        else { try { localStorage.removeItem(LS); } catch (e) {} }
+        $('key').value = key;
+        clearInterval(timer);
+        timer = setInterval(load, 60000);
+      })
+      .catch(function (e) {
+        if (e && e.message === 'stop') return;
+        status('Could not reach the service. Check the internet and try again.', true);
+      });
+  }
+
+  function signOut() {
+    clearInterval(timer);
+    try { localStorage.removeItem(LS); } catch (e) {}
+    $('key').value = ''; $('remember').checked = false;
+    signedIn(false); status('Signed out.');
+  }
+
+  $('go').addEventListener('click', load);
+  $('refresh').addEventListener('click', load);
+  $('signout').addEventListener('click', signOut);
+  $('key').addEventListener('keydown', function (e) { if (e.key === 'Enter') load(); });
+
+  try {
+    var saved = localStorage.getItem(LS);
+    if (saved) { $('key').value = saved; $('remember').checked = true; load(); }
+  } catch (e) {}
+})();
+</script>
+</body>
+</html>
